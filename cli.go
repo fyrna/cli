@@ -6,13 +6,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strings"
 )
 
 // App is the root CLI application.
 type App struct {
-	name     string
+	Name     string
 	root     *node
 	dynamics map[string]Dynamic // dynamic struct registry (experimental, I will probably delete it)
 	plugins  []Plugin
@@ -24,6 +25,15 @@ type App struct {
 	// I/O (pluggable)
 	Out io.Writer
 	Err io.Writer
+
+	// configuration
+	Config AppConfig
+
+	flatCmds map[string]*Command
+}
+
+type AppConfig struct {
+	Debug bool
 }
 
 // Context carries data through the call chain.
@@ -81,6 +91,9 @@ type Plugin interface{ Install(*App) error }
 type NotFoundHandler func(*Context, string) error
 type ErrorHandler func(*Context, error) error
 
+// handler for print all commands
+func (a *App) Commands() map[string]*Command { return a.flatCmds }
+
 // --
 // Internal tree node
 // --
@@ -108,7 +121,7 @@ func (n *node) get(parts []string) (*node, []string) {
 
 func New(name string) *App {
 	return &App{
-		name:     name,
+		Name:     name,
 		root:     &node{subs: make(map[string]*node)},
 		dynamics: make(map[string]Dynamic),
 		OnNotFound: func(ctx *Context, s string) error {
@@ -127,9 +140,9 @@ func New(name string) *App {
 // Fluent API for the three styles
 
 // 1. Simple style
-func (a *App) Command(path string, fn func(*Context) error) *App {
-	return a.add(path, &Command{Action: fn})
-}
+// func (a *App) Command(path string, fn func(*Context) error) *App {
+// return a.add(path, &Command{Action: fn})
+// }
 
 // 2. Metadata via option
 type Option func(*Command)
@@ -143,7 +156,7 @@ func Before(fn func(*Context) error) Option { return func(c *Command) { c.Before
 func After(fn func(*Context) error) Option  { return func(c *Command) { c.After = fn } }
 func Flags(fs *flag.FlagSet) Option         { return func(c *Command) { c.Flags = fs } }
 
-func (a *App) Cmd(path string, action func(*Context) error, opts ...Option) *App {
+func (a *App) Command(path string, action func(*Context) error, opts ...Option) *App {
 	cmd := &Command{Action: action}
 	for _, o := range opts {
 		o(cmd)
@@ -183,7 +196,15 @@ func (a *App) Use(p ...Plugin) *App {
 
 // -- Run program --
 func (a *App) Run(args []string) error {
+
+	if a.Config.Debug {
+		log.Println("report bug: https://github.com/fyrna/cli/issues")
+	}
+
 	if len(args) == 0 {
+		if a.Config.Debug {
+			log.Println("no help command provided, using default help...")
+		}
 		return a.showRootHelp()
 	}
 	n, rest := a.root.get(strings.Split(args[0], " "))
@@ -191,7 +212,12 @@ func (a *App) Run(args []string) error {
 		ctx := &Context{App: a, Args: rest}
 		return a.OnNotFound(ctx, args[0])
 	}
-	return a.execute(n.cmd, rest)
+
+	if a.Config.Debug && len(args) >= 1 {
+		log.Println("we detect arg(s) parsed: ", args)
+	}
+
+	return a.execute(n.cmd, args)
 }
 
 func (a *App) execute(c *Command, args []string) (err error) {
@@ -228,7 +254,8 @@ func (a *App) execute(c *Command, args []string) (err error) {
 }
 
 func (a *App) showRootHelp() error {
-	fmt.Fprintf(a.Out, "Usage: %s <command>\n", a.name)
+	fmt.Fprintf(a.Out, `Usage: %s <command>\n`, a.Name)
+
 	return nil
 }
 
