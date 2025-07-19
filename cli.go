@@ -62,8 +62,11 @@ type Context struct {
 	Flags *flag.FlagSet
 }
 
-func (c *Context) Args() []string {
-	return c.Flags.Args()
+func (c *Context) Args(index ...int) any {
+	if len(index) == 0 {
+		return c.Flags.Args()
+	}
+	return c.Flags.Arg(index[0])
 }
 
 // Command is the canonical representation of a runnable thing.
@@ -229,7 +232,7 @@ func (a *App) execute(c *Command, args []string) (err error) {
 	if fs == nil {
 		fs = flag.NewFlagSet(c.Name, flag.ContinueOnError)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
 	ctx := &Context{
