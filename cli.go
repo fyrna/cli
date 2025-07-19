@@ -38,10 +38,10 @@ type AppConfig struct {
 
 // Context carries data through the call chain.
 type Context struct {
-	App   *App
-	Cmd   *Command
-	Args  []string
-	Store map[string]any
+	App     *App
+	Cmd     *Command
+	RawArgs []string
+	Store   map[string]any
 
 	// TODO: implement our own, for example:
 	//     app := cli.New()
@@ -60,6 +60,10 @@ type Context struct {
 	//     -- or --
 	//     cmd.StringFlag() -- direct --
 	Flags *flag.FlagSet
+}
+
+func (c *Context) Args() []string {
+	return c.Flags.Args()
 }
 
 // Command is the canonical representation of a runnable thing.
@@ -209,7 +213,7 @@ func (a *App) Run(args []string) error {
 	}
 	n, rest := a.root.get(strings.Split(args[0], " "))
 	if n.cmd == nil {
-		ctx := &Context{App: a, Args: rest}
+		ctx := &Context{App: a, RawArgs: rest}
 		return a.OnNotFound(ctx, args[0])
 	}
 
@@ -229,11 +233,11 @@ func (a *App) execute(c *Command, args []string) (err error) {
 		return err
 	}
 	ctx := &Context{
-		App:   a,
-		Cmd:   c,
-		Args:  fs.Args(),
-		Flags: fs,
-		Store: make(map[string]any),
+		App:     a,
+		Cmd:     c,
+		RawArgs: args,
+		Flags:   fs,
+		Store:   make(map[string]any),
 	}
 	if c.Before != nil {
 		if err = c.Before(ctx); err != nil {
