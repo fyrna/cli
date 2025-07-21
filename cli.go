@@ -42,24 +42,7 @@ type Context struct {
 	Cmd     *Command
 	RawArgs []string
 	Store   map[string]any
-
-	// TODO: implement our own, for example:
-	//     app := cli.New()
-	//
-	//     -- global flag --
-	//     app.Flags(cli.StringFlag())
-	//     -- or --
-	//     app.StringFlag() -- direct --
-	//
-	//     cmd := app.Commands("", cli.Short(""), func("") error {})
-	//     -- command flag : there's 2 type: strict & inherit
-	//     -- * strict means only for "x" command
-	//     -- * inherit means subcommand for "x" can you it too
-	//     -- for default we set to strict, user can define it as "configurable"
-	//     cmd.Flags(StringFlag())
-	//     -- or --
-	//     cmd.StringFlag() -- direct --
-	Flags *flag.FlagSet
+	Flags   *flag.FlagSet
 }
 
 func (c *Context) Args(index ...int) any {
@@ -158,15 +141,25 @@ func Category(cat string) Option { return func(c *Command) { c.Category = cat } 
 
 func Flags(fs *flag.FlagSet) Option { return func(c *Command) { c.Flags = fs } }
 
-func (a *App) Command(path string, opts ...Option) *App {
+func (a *App) Command(path string, actionOrOps ...any) *App {
 	cmd := &Command{}
-	for _, o := range opts {
-		o(cmd)
+
+	if len(actionOrOps) == 1 {
+		if fn, ok := actionOrOps[0].(func(*Context) error); ok {
+			cmd.Action = fn
+			return a.add(path, cmd)
+		}
 	}
+
+	for _, opt := range actionOrOps {
+		if o, ok := opt.(Option); ok {
+			o(cmd)
+		}
+	}
+
 	return a.add(path, cmd)
 }
 
-// 3. Dynamic struct
 func (a *App) Register(d Dynamic) *App {
 	meta := d.Metadata()
 	a.dynamics[meta.Name] = d
