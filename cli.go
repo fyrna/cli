@@ -45,13 +45,6 @@ type Context struct {
 	Flags   *flag.FlagSet
 }
 
-func (c *Context) Args(index ...int) any {
-	if len(index) == 0 {
-		return c.Flags.Args()
-	}
-	return c.Flags.Arg(index[0])
-}
-
 // Command is the canonical representation of a runnable thing.
 type Command struct {
 	Name     string
