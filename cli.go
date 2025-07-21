@@ -38,28 +38,11 @@ type AppConfig struct {
 
 // Context carries data through the call chain.
 type Context struct {
-	App   *App
-	Cmd   *Command
-	Args  []string
-	Store map[string]any
-
-	// TODO: implement our own, for example:
-	//     app := cli.New()
-	//
-	//     -- global flag --
-	//     app.Flags(cli.StringFlag())
-	//     -- or --
-	//     app.StringFlag() -- direct --
-	//
-	//     cmd := app.Commands("", cli.Short(""), func("") error {})
-	//     -- command flag : there's 2 type: strict & inherit
-	//     -- * strict means only for "x" command
-	//     -- * inherit means subcommand for "x" can you it too
-	//     -- for default we set to strict, user can define it as "configurable"
-	//     cmd.Flags(StringFlag())
-	//     -- or --
-	//     cmd.StringFlag() -- direct --
-	Flags *flag.FlagSet
+	App     *App
+	Cmd     *Command
+	RawArgs []string
+	Store   map[string]any
+	Flags   *flag.FlagSet
 }
 
 // Command is the canonical representation of a runnable thing.
@@ -137,34 +120,39 @@ func New(name string) *App {
 	}
 }
 
-// Fluent API for the three styles
-
-// 1. Simple style
-// func (a *App) Command(path string, fn func(*Context) error) *App {
-// return a.add(path, &Command{Action: fn})
-// }
-
-// 2. Metadata via option
 type Option func(*Command)
 
-func Short(s string) Option                 { return func(c *Command) { c.Short = s } }
-func Long(s string) Option                  { return func(c *Command) { c.Long = s } }
-func Alias(a ...string) Option              { return func(c *Command) { c.Aliases = a } }
-func Usage(u string) Option                 { return func(c *Command) { c.Usage = u } }
-func Category(cat string) Option            { return func(c *Command) { c.Category = cat } }
+func Action(fn func(*Context) error) Option { return func(c *Command) { c.Action = fn } }
 func Before(fn func(*Context) error) Option { return func(c *Command) { c.Before = fn } }
 func After(fn func(*Context) error) Option  { return func(c *Command) { c.After = fn } }
-func Flags(fs *flag.FlagSet) Option         { return func(c *Command) { c.Flags = fs } }
 
-func (a *App) Command(path string, action func(*Context) error, opts ...Option) *App {
-	cmd := &Command{Action: action}
-	for _, o := range opts {
-		o(cmd)
+func Short(s string) Option      { return func(c *Command) { c.Short = s } }
+func Long(s string) Option       { return func(c *Command) { c.Long = s } }
+func Alias(a ...string) Option   { return func(c *Command) { c.Aliases = a } }
+func Usage(u string) Option      { return func(c *Command) { c.Usage = u } }
+func Category(cat string) Option { return func(c *Command) { c.Category = cat } }
+
+func Flags(fs *flag.FlagSet) Option { return func(c *Command) { c.Flags = fs } }
+
+func (a *App) Command(path string, actionOrOps ...any) *App {
+	cmd := &Command{}
+
+	if len(actionOrOps) == 1 {
+		if fn, ok := actionOrOps[0].(func(*Context) error); ok {
+			cmd.Action = fn
+			return a.add(path, cmd)
+		}
 	}
+
+	for _, opt := range actionOrOps {
+		if o, ok := opt.(Option); ok {
+			o(cmd)
+		}
+	}
+
 	return a.add(path, cmd)
 }
 
-// 3. Dynamic struct
 func (a *App) Register(d Dynamic) *App {
 	meta := d.Metadata()
 	a.dynamics[meta.Name] = d
@@ -209,7 +197,7 @@ func (a *App) Run(args []string) error {
 	}
 	n, rest := a.root.get(strings.Split(args[0], " "))
 	if n.cmd == nil {
-		ctx := &Context{App: a, Args: rest}
+		ctx := &Context{App: a, RawArgs: rest}
 		return a.OnNotFound(ctx, args[0])
 	}
 
@@ -225,15 +213,15 @@ func (a *App) execute(c *Command, args []string) (err error) {
 	if fs == nil {
 		fs = flag.NewFlagSet(c.Name, flag.ContinueOnError)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
 	ctx := &Context{
-		App:   a,
-		Cmd:   c,
-		Args:  fs.Args(),
-		Flags: fs,
-		Store: make(map[string]any),
+		App:     a,
+		Cmd:     c,
+		RawArgs: args,
+		Flags:   fs,
+		Store:   make(map[string]any),
 	}
 	if c.Before != nil {
 		if err = c.Before(ctx); err != nil {
