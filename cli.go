@@ -144,27 +144,22 @@ func New(name string) *App {
 	}
 }
 
-// Fluent API for the three styles
-
-// 1. Simple style
-// func (a *App) Command(path string, fn func(*Context) error) *App {
-// return a.add(path, &Command{Action: fn})
-// }
-
-// 2. Metadata via option
 type Option func(*Command)
 
-func Short(s string) Option                 { return func(c *Command) { c.Short = s } }
-func Long(s string) Option                  { return func(c *Command) { c.Long = s } }
-func Alias(a ...string) Option              { return func(c *Command) { c.Aliases = a } }
-func Usage(u string) Option                 { return func(c *Command) { c.Usage = u } }
-func Category(cat string) Option            { return func(c *Command) { c.Category = cat } }
+func Action(fn func(*Context) error) Option { return func(c *Command) { c.Action = fn } }
 func Before(fn func(*Context) error) Option { return func(c *Command) { c.Before = fn } }
 func After(fn func(*Context) error) Option  { return func(c *Command) { c.After = fn } }
-func Flags(fs *flag.FlagSet) Option         { return func(c *Command) { c.Flags = fs } }
 
-func (a *App) Command(path string, action func(*Context) error, opts ...Option) *App {
-	cmd := &Command{Action: action}
+func Short(s string) Option      { return func(c *Command) { c.Short = s } }
+func Long(s string) Option       { return func(c *Command) { c.Long = s } }
+func Alias(a ...string) Option   { return func(c *Command) { c.Aliases = a } }
+func Usage(u string) Option      { return func(c *Command) { c.Usage = u } }
+func Category(cat string) Option { return func(c *Command) { c.Category = cat } }
+
+func Flags(fs *flag.FlagSet) Option { return func(c *Command) { c.Flags = fs } }
+
+func (a *App) Command(path string, opts ...Option) *App {
+	cmd := &Command{}
 	for _, o := range opts {
 		o(cmd)
 	}
