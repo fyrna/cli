@@ -14,8 +14,9 @@ import (
 // App is the root CLI application.
 type App struct {
 	Name     string
+	Version  string
 	root     *node
-	dynamics map[string]Dynamic // dynamic struct registry (experimental, I will probably delete it)
+	dynamics map[string]Dynamic // dynamic struct registry (experimental)
 	plugins  []Plugin
 
 	// behaviour hooks
@@ -34,15 +35,6 @@ type App struct {
 
 type AppConfig struct {
 	Debug bool
-}
-
-// Context carries data through the call chain.
-type Context struct {
-	App     *App
-	Cmd     *Command
-	RawArgs []string
-	Store   map[string]any
-	Flags   *flag.FlagSet
 }
 
 // Command is the canonical representation of a runnable thing.
@@ -77,10 +69,7 @@ type ErrorHandler func(*Context, error) error
 // handler for print all commands
 func (a *App) Commands() map[string]*Command { return a.flatCmds }
 
-// --
 // Internal tree node
-// --
-
 type node struct {
 	cmd  *Command
 	subs map[string]*node
@@ -98,10 +87,7 @@ func (n *node) get(parts []string) (*node, []string) {
 	return cur, nil
 }
 
-// --
 // Constructor
-// --
-
 func New(name string) *App {
 	return &App{
 		Name:     name,
@@ -125,17 +111,15 @@ type Option func(*Command)
 func Action(fn func(*Context) error) Option { return func(c *Command) { c.Action = fn } }
 func Before(fn func(*Context) error) Option { return func(c *Command) { c.Before = fn } }
 func After(fn func(*Context) error) Option  { return func(c *Command) { c.After = fn } }
-
-func Short(s string) Option      { return func(c *Command) { c.Short = s } }
-func Long(s string) Option       { return func(c *Command) { c.Long = s } }
-func Alias(a ...string) Option   { return func(c *Command) { c.Aliases = a } }
-func Usage(u string) Option      { return func(c *Command) { c.Usage = u } }
-func Category(cat string) Option { return func(c *Command) { c.Category = cat } }
-
-func Flags(fs *flag.FlagSet) Option { return func(c *Command) { c.Flags = fs } }
+func Short(s string) Option                 { return func(c *Command) { c.Short = s } }
+func Long(s string) Option                  { return func(c *Command) { c.Long = s } }
+func Alias(a ...string) Option              { return func(c *Command) { c.Aliases = a } }
+func Usage(u string) Option                 { return func(c *Command) { c.Usage = u } }
+func Category(cat string) Option            { return func(c *Command) { c.Category = cat } }
+func Flags(fs *flag.FlagSet) Option         { return func(c *Command) { c.Flags = fs } }
 
 func (a *App) Command(path string, actionOrOps ...any) *App {
-	cmd := &Command{}
+	cmd := &Command{Name: path}
 
 	if len(actionOrOps) == 1 {
 		if fn, ok := actionOrOps[0].(func(*Context) error); ok {
@@ -172,7 +156,7 @@ func (a *App) add(path string, cmd *Command) *App {
 	return a
 }
 
-// -- Plugin & I/O helpers --
+// Installing plugins
 func (a *App) Use(p ...Plugin) *App {
 	for _, pl := range p {
 		if err := pl.Install(a); err != nil {
@@ -182,30 +166,26 @@ func (a *App) Use(p ...Plugin) *App {
 	return a
 }
 
-// -- Run program --
-func (a *App) Run(args []string) error {
-
+func (a *App) showRootHelp() error {
 	if a.Config.Debug {
-		log.Println("report bug: https://github.com/fyrna/cli/issues")
+		// FIXME: root > help > rootHelp
+		// i'll fix this later
+		log.Println(DebugNoRootCommand)
+		log.Println(DebugUsingDefaultHelp)
 	}
 
-	if len(args) == 0 {
-		if a.Config.Debug {
-			log.Println("no help command provided, using default help...")
-		}
-		return a.showRootHelp()
-	}
-	n, rest := a.root.get(strings.Split(args[0], " "))
-	if n.cmd == nil {
-		ctx := &Context{App: a, RawArgs: rest}
-		return a.OnNotFound(ctx, args[0])
+	v := ""
+
+	if a.Version != "" {
+		v = a.Version
+		fmt.Fprintf(a.Out, "%s - %s\n", a.Name, v)
+	} else {
+		fmt.Fprintf(a.Out, "%s\n", a.Name)
 	}
 
-	if a.Config.Debug && len(args) >= 1 {
-		log.Println("we detect arg(s) parsed: ", args)
-	}
+	fmt.Fprintf(a.Out, "\nUsage: %s <command>\n", a.Name)
 
-	return a.execute(n.cmd, args)
+	return nil
 }
 
 func (a *App) execute(c *Command, args []string) (err error) {
@@ -213,9 +193,11 @@ func (a *App) execute(c *Command, args []string) (err error) {
 	if fs == nil {
 		fs = flag.NewFlagSet(c.Name, flag.ContinueOnError)
 	}
+
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
+
 	ctx := &Context{
 		App:     a,
 		Cmd:     c,
@@ -223,14 +205,17 @@ func (a *App) execute(c *Command, args []string) (err error) {
 		Flags:   fs,
 		Store:   make(map[string]any),
 	}
+
 	if c.Before != nil {
 		if err = c.Before(ctx); err != nil {
 			return err
 		}
 	}
+
 	if c.Action == nil {
-		return errors.New("no action")
+		return errors.New("onii-chan.. no action defined")
 	}
+
 	defer func() {
 		if c.After != nil {
 			if e := c.After(ctx); e != nil && err == nil {
@@ -238,21 +223,37 @@ func (a *App) execute(c *Command, args []string) (err error) {
 			}
 		}
 	}()
+
 	return c.Action(ctx)
 }
 
-func (a *App) showRootHelp() error {
-	fmt.Fprintf(a.Out, `Usage: %s <command>\n`, a.Name)
+// Runuwu >x<
+func (a *App) Run(args []string) error {
+	if a.Config.Debug {
+		log.Println(DebugReport)
+	}
 
-	return nil
+	if len(args) == 0 {
+		return a.showRootHelp()
+	}
+
+	n, rest := a.root.get(strings.Split(args[0], " "))
+
+	if n.cmd == nil {
+		ctx := &Context{App: a, RawArgs: rest}
+		return a.OnNotFound(ctx, args[0])
+	}
+
+	if a.Config.Debug {
+		log.Println("onii-chan, i detectu args parsedu: ", args)
+	}
+
+	return a.execute(n.cmd, args)
 }
 
-// --
 // Convenience entry point (os.Args)
 // this is a simple way to parse, but
-// you can use your own! app.Run() ! >x<
-// --
-
+// you can use your own with app.Run() ! >x<
 func (a *App) Parse() {
 	if err := a.Run(os.Args[1:]); err != nil {
 		ctx := &Context{App: a}
