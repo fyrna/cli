@@ -13,12 +13,9 @@ import (
 
 // App is the root CLI application.
 type App struct {
-	Name     string
-	Version  string
-	Desc     string
-	root     *node
-	dynamics map[string]Dynamic // dynamic struct registry (experimental)
-	plugins  []Plugin
+	Name    string
+	Version string
+	Desc    string
 
 	// behaviour hooks
 	OnNotFound NotFoundHandler
@@ -31,6 +28,9 @@ type App struct {
 	// configuration
 	config appConfig
 
+	// internal use
+	root     *node
+	plugins  []Plugin
 	flatCmds map[string]*Command
 }
 
@@ -52,12 +52,6 @@ type Command struct {
 	After  func(*Context) error
 
 	Flags *flag.FlagSet
-}
-
-// Dynamic allows a struct to describe itself at runtime.
-type Dynamic interface {
-	Metadata() Command
-	Run(*Context) error
 }
 
 // Plugin is the extension point.
@@ -91,9 +85,8 @@ func (n *node) get(parts []string) (*node, []string) {
 // Constructor
 func New(name string, opts ...ConfigOption) *App {
 	app := &App{
-		Name:     name,
-		root:     &node{subs: make(map[string]*node)},
-		dynamics: make(map[string]Dynamic),
+		Name: name,
+		root: &node{subs: make(map[string]*node)},
 		OnNotFound: func(ctx *Context, s string) error {
 			fmt.Fprintf(ctx.App.Err, "command %q not found\n", s)
 			return nil
@@ -130,13 +123,6 @@ func (a *App) Command(path string, actionOrOps ...any) *App {
 	}
 
 	return a.add(path, cmd)
-}
-
-func (a *App) Register(d Dynamic) *App {
-	meta := d.Metadata()
-	a.dynamics[meta.Name] = d
-	a.add(meta.Name, &meta)
-	return a
 }
 
 func (a *App) add(path string, cmd *Command) *App {
@@ -178,7 +164,9 @@ func (a *App) showRootHelp() error {
 		fmt.Fprintf(a.Out, "%s\n", a.Name)
 	}
 
-	fmt.Fprintf(a.Out, "\nUsage: %s <command>\n", a.Name)
+	if a.Desc != "" {
+		fmt.Fprintf(a.Out, "\t%s\n", a.Desc)
+	}
 
 	return nil
 }
@@ -222,8 +210,8 @@ func (a *App) execute(c *Command, args []string) (err error) {
 	return c.Action(ctx)
 }
 
-// Runuwu >x<
-func (a *App) Run(args []string) error {
+// parser
+func (a *App) Parse(args []string) error {
 	if a.config.debug {
 		log.Println(DebugReport)
 	}
@@ -246,11 +234,9 @@ func (a *App) Run(args []string) error {
 	return a.execute(n.cmd, args)
 }
 
-// Convenience entry point (os.Args)
-// this is a simple way to parse, but
-// you can use your own with app.Run() ! >x<
-func (a *App) Parse() {
-	if err := a.Run(os.Args[1:]); err != nil {
+// Builtin runner
+func (a *App) Run() {
+	if err := a.Parse(os.Args[1:]); err != nil {
 		ctx := &Context{App: a}
 		a.OnError(ctx, err)
 		os.Exit(1)
