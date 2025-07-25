@@ -15,6 +15,7 @@ import (
 type App struct {
 	Name     string
 	Version  string
+	Desc     string
 	root     *node
 	dynamics map[string]Dynamic // dynamic struct registry (experimental)
 	plugins  []Plugin
@@ -88,8 +89,8 @@ func (n *node) get(parts []string) (*node, []string) {
 }
 
 // Constructor
-func New(name string) *App {
-	return &App{
+func New(name string, opts ...ConfigOption) *App {
+	app := &App{
 		Name:     name,
 		root:     &node{subs: make(map[string]*node)},
 		dynamics: make(map[string]Dynamic),
@@ -104,19 +105,13 @@ func New(name string) *App {
 		Out: os.Stdout,
 		Err: os.Stderr,
 	}
+
+	for _, o := range opts {
+		o(app)
+	}
+
+	return app
 }
-
-type Option func(*Command)
-
-func Action(fn func(*Context) error) Option { return func(c *Command) { c.Action = fn } }
-func Before(fn func(*Context) error) Option { return func(c *Command) { c.Before = fn } }
-func After(fn func(*Context) error) Option  { return func(c *Command) { c.After = fn } }
-func Short(s string) Option                 { return func(c *Command) { c.Short = s } }
-func Long(s string) Option                  { return func(c *Command) { c.Long = s } }
-func Alias(a ...string) Option              { return func(c *Command) { c.Aliases = a } }
-func Usage(u string) Option                 { return func(c *Command) { c.Usage = u } }
-func Category(cat string) Option            { return func(c *Command) { c.Category = cat } }
-func Flags(fs *flag.FlagSet) Option         { return func(c *Command) { c.Flags = fs } }
 
 func (a *App) Command(path string, actionOrOps ...any) *App {
 	cmd := &Command{Name: path}
@@ -129,7 +124,7 @@ func (a *App) Command(path string, actionOrOps ...any) *App {
 	}
 
 	for _, opt := range actionOrOps {
-		if o, ok := opt.(Option); ok {
+		if o, ok := opt.(CommandOption); ok {
 			o(cmd)
 		}
 	}
