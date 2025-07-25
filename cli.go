@@ -29,13 +29,13 @@ type App struct {
 	Err io.Writer
 
 	// configuration
-	Config AppConfig
+	config appConfig
 
 	flatCmds map[string]*Command
 }
 
-type AppConfig struct {
-	Debug bool
+type appConfig struct {
+	debug bool
 }
 
 // Command is the canonical representation of a runnable thing.
@@ -162,7 +162,7 @@ func (a *App) Use(p ...Plugin) *App {
 }
 
 func (a *App) showRootHelp() error {
-	if a.Config.Debug {
+	if a.config.debug {
 		// FIXME: root > help > rootHelp
 		// i'll fix this later
 		log.Println(DebugNoRootCommand)
@@ -224,7 +224,7 @@ func (a *App) execute(c *Command, args []string) (err error) {
 
 // Runuwu >x<
 func (a *App) Run(args []string) error {
-	if a.Config.Debug {
+	if a.config.debug {
 		log.Println(DebugReport)
 	}
 
@@ -239,7 +239,7 @@ func (a *App) Run(args []string) error {
 		return a.OnNotFound(ctx, args[0])
 	}
 
-	if a.Config.Debug {
+	if a.config.debug {
 		log.Println("onii-chan, i detectu args parsedu: ", args)
 	}
 

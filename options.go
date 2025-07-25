@@ -16,7 +16,7 @@ func SetDesc(d string) ConfigOption {
 }
 
 func SetDebug(e bool) ConfigOption {
-	return func(a *App) { a.Config.Debug = e }
+	return func(a *App) { a.config.debug = e }
 }
 
 // command
