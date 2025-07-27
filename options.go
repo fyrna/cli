@@ -4,7 +4,7 @@ import (
 	"flag"
 )
 
-// config
+// :: config
 type ConfigOption func(*App)
 
 func SetVersion(v string) ConfigOption {
@@ -19,21 +19,22 @@ func SetDebug(e bool) ConfigOption {
 	return func(a *App) { a.config.debug = e }
 }
 
-// command
+// :: command
 type CommandOption func(*Command)
+type fun func(*Context) error
 
 // what defined command should do?
-func Action(fn func(*Context) error) CommandOption {
+func Action(fn fun) CommandOption {
 	return func(c *Command) { c.Action = fn }
 }
 
 // execute before action
-func Before(fn func(*Context) error) CommandOption {
+func Before(fn fun) CommandOption {
 	return func(c *Command) { c.Before = fn }
 }
 
 // execute after action
-func After(fn func(*Context) error) CommandOption {
+func After(fn fun) CommandOption {
 	return func(c *Command) { c.After = fn }
 }
 

@@ -151,8 +151,8 @@ func (a *App) showRootHelp() error {
 	if a.config.debug {
 		// FIXME: root > help > rootHelp
 		// i'll fix this later
-		log.Println(DebugNoRootCommand)
-		log.Println(DebugUsingDefaultHelp)
+		log.Println(debugNoRootCommand)
+		log.Println(debugUsingDefaultHelp)
 	}
 
 	v := ""
@@ -213,7 +213,7 @@ func (a *App) execute(c *Command, args []string) (err error) {
 // parser
 func (a *App) Parse(args []string) error {
 	if a.config.debug {
-		log.Println(DebugReport)
+		log.Println(debugReport)
 	}
 
 	if len(args) == 0 {
@@ -228,7 +228,7 @@ func (a *App) Parse(args []string) error {
 	}
 
 	if a.config.debug {
-		log.Println("onii-chan, i detectu args parsedu: ", args)
+		log.Printf(debugArgsParsed, args)
 	}
 
 	return a.execute(n.cmd, args)
