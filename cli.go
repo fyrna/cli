@@ -220,7 +220,7 @@ func (a *App) Parse(args []string) error {
 		return a.showRootHelp()
 	}
 
-	n, rest := a.root.get(strings.Split(args[0], " "))
+	n, rest := a.root.get(args)
 
 	if n.cmd == nil {
 		ctx := &Context{App: a, RawArgs: rest}
