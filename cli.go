@@ -88,7 +88,7 @@ func New(name string, opts ...ConfigOption) *App {
 		Name: name,
 		root: &node{subs: make(map[string]*node)},
 		OnNotFound: func(ctx *Context, s string) error {
-			fmt.Fprintf(ctx.App.Err, "command %q not found\n", s)
+			fmt.Fprintf(ctx.App.Err, errCommandNotFound, s)
 			return nil
 		},
 		OnError: func(ctx *Context, err error) error {
@@ -102,6 +102,8 @@ func New(name string, opts ...ConfigOption) *App {
 	for _, o := range opts {
 		o(app)
 	}
+
+	app.Use(printAppVersion{})
 
 	return app
 }
@@ -125,13 +127,33 @@ func (a *App) Command(path string, actionOrOps ...any) *App {
 	return a.add(path, cmd)
 }
 
+func isBuiltin(name string) bool {
+	switch name {
+	case "version", "help", "verbose":
+		return true
+	}
+	return false
+}
+
 func (a *App) add(path string, cmd *Command) *App {
+	// root override
+	if path == rootCommandName {
+		a.root.cmd = cmd
+		return a
+	}
+
 	parts := strings.Split(path, " ")
 	cur, _ := a.root.get(parts[:len(parts)-1])
 	name := parts[len(parts)-1]
+
 	if _, ok := cur.subs[name]; ok {
-		panic("duplicate command: " + path)
+		if isBuiltin(name) {
+			delete(cur.subs, name)
+		} else {
+			panic(errDuplicateCommand + path)
+		}
 	}
+
 	cmd.Name = name
 	cur.subs[name] = &node{cmd: cmd, subs: make(map[string]*node)}
 	return a
@@ -145,30 +167,6 @@ func (a *App) Use(p ...Plugin) *App {
 		}
 	}
 	return a
-}
-
-func (a *App) showRootHelp() error {
-	if a.config.debug {
-		// FIXME: root > help > rootHelp
-		// i'll fix this later
-		log.Println(debugNoRootCommand)
-		log.Println(debugUsingDefaultHelp)
-	}
-
-	v := ""
-
-	if a.Version != "" {
-		v = a.Version
-		fmt.Fprintf(a.Out, "%s - %s\n", a.Name, v)
-	} else {
-		fmt.Fprintf(a.Out, "%s\n", a.Name)
-	}
-
-	if a.Desc != "" {
-		fmt.Fprintf(a.Out, "\t%s\n", a.Desc)
-	}
-
-	return nil
 }
 
 func (a *App) execute(c *Command, args []string) (err error) {
@@ -217,6 +215,23 @@ func (a *App) Parse(args []string) error {
 	}
 
 	if len(args) == 0 {
+		if a.config.debug {
+			log.Println(debugNoRootCommand)
+			log.Println(debugUsingDefaultHelp)
+		}
+
+		// 1) root command
+		if a.root.cmd != nil {
+			return a.execute(a.root.cmd, []string{rootCommandName})
+		}
+
+		// 2) help command
+		h, ok := a.root.subs["help"]
+		if ok && h.cmd != nil {
+			return a.execute(h.cmd, []string{"help"})
+		}
+
+		// 3) default
 		return a.showRootHelp()
 	}
 
