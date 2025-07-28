@@ -5,7 +5,7 @@ import (
 )
 
 // minimal help
-func (a *App) showRootHelp() error {
+func (a *App) ShowRootHelp() error {
 	if a.Version != "" {
 		fmt.Fprintf(a.Out, "%s - %s\n", a.Name, a.Version)
 	} else {

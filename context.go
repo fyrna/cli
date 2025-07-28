@@ -1,6 +1,9 @@
 package cli
 
-import "flag"
+import (
+	"flag"
+	"strings"
+)
 
 // Context carries data through the call chain.
 type Context struct {
@@ -9,4 +12,9 @@ type Context struct {
 	RawArgs []string
 	Store   map[string]any
 	Flags   *flag.FlagSet
+}
+
+func (c *Context) Exec(path string, args ...string) error {
+	parts := append(strings.Split(path, " "), args...)
+	return c.App.Parse(parts)
 }

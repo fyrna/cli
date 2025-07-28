@@ -232,7 +232,7 @@ func (a *App) Parse(args []string) error {
 		}
 
 		// 3) default
-		return a.showRootHelp()
+		return a.ShowRootHelp()
 	}
 
 	n, rest := a.root.get(args)
