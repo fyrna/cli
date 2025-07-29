@@ -32,6 +32,7 @@ type App struct {
 	root     *node
 	plugins  []Plugin
 	flatCmds map[string]*Command
+	hooks    *HookManager
 }
 
 type appConfig struct {
@@ -67,6 +68,14 @@ type ErrorHandler func(*Context, error) error
 // handler for print all commands
 func (a *App) Commands() map[string]*Command { return a.flatCmds }
 
+func (a *App) Hook() *HookManager {
+	if a.hooks == nil {
+		a.hooks = newHookManager(a)
+	}
+
+	return a.hooks
+}
+
 // Internal tree node
 type node struct {
 	cmd  *Command
@@ -96,6 +105,15 @@ func (a *App) debugf(format string, v ...any) {
 // internal recover wrapper
 func (a *App) safeExecute(c *Command, args []string) (err error) {
 	defer func() {
+		if a.hooks != nil {
+			ctx := &Context{App: a, Cmd: c, RawArgs: args}
+			hookErr := a.hooks.trigger("after_root", ctx)
+
+			if hookErr != nil && err == nil {
+				err = hookErr
+			}
+		}
+
 		if r := recover(); r != nil {
 			if a.config.panicHandler != nil {
 				a.config.panicHandler(r)
@@ -104,6 +122,14 @@ func (a *App) safeExecute(c *Command, args []string) (err error) {
 			}
 		}
 	}()
+
+	// trigger BeforeRoot hooks
+	if a.hooks != nil {
+		ctx := &Context{App: a, Cmd: c, RawArgs: args}
+		if err := a.hooks.trigger("before_root", ctx); err != nil {
+			return err
+		}
+	}
 
 	return a.execute(c, args)
 }
@@ -217,6 +243,21 @@ func (a *App) execute(c *Command, args []string) (err error) {
 		Store:   make(map[string]any),
 	}
 
+	if a.hooks != nil {
+		if err := a.hooks.trigger("before_command", ctx, c); err != nil {
+			return err
+		}
+	}
+
+	defer func() {
+		// Trigger after_command hook
+		if a.hooks != nil {
+			if hookErr := a.hooks.trigger("after_command", ctx, c); hookErr != nil && err == nil {
+				err = hookErr
+			}
+		}
+	}()
+
 	if c.Before != nil {
 		if err = c.Before(ctx); err != nil {
 			return err
@@ -242,6 +283,22 @@ func (a *App) execute(c *Command, args []string) (err error) {
 func (a *App) Parse(args []string) error {
 	a.debugf("%s", debugReport)
 
+	ctx := &Context{App: a, RawArgs: args}
+
+	// Trigger before_parse hook
+	if a.hooks != nil {
+		if err := a.hooks.trigger("before_parse", ctx, args); err != nil {
+			return err
+		}
+	}
+
+	defer func() {
+		// Trigger after_parse hook
+		if a.hooks != nil {
+			a.hooks.trigger("after_parse", ctx, args)
+		}
+	}()
+
 	if len(args) == 0 {
 		a.debugf("%s", debugNoRootCommand)
 
@@ -266,8 +323,12 @@ func (a *App) Parse(args []string) error {
 	n, rest := a.root.get(args)
 
 	if len(rest) > 0 {
-		ctx := &Context{App: a, RawArgs: rest}
-		return a.OnNotFound(ctx, rest[0])
+		if a.Hook().HasHook("not_found") {
+			return a.hooks.trigger("not_found", ctx, rest[0])
+		} else {
+			ctx := &Context{App: a, RawArgs: rest}
+			return a.OnNotFound(ctx, rest[0])
+		}
 	}
 
 	if n.cmd == nil {
