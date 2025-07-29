@@ -2,6 +2,13 @@
 
 a cute litte cli framework
 
+> [!WARNING]
+> As long as main branch named "trunk", it's means breaking change can happen anytime.
+>
+> Don't use it now, wait for at least 0.1
+>
+> Also I don't accept any PR, just issue only
+
 ### Example
 
 A simple "just works"
