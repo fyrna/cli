@@ -264,6 +264,12 @@ func (a *App) Parse(args []string) error {
 	}
 
 	n, rest := a.root.get(args)
+
+	if len(rest) > 0 {
+		ctx := &Context{App: a, RawArgs: rest}
+		return a.OnNotFound(ctx, rest[0])
+	}
+
 	if n.cmd == nil {
 		ctx := &Context{App: a, RawArgs: rest}
 		return a.OnNotFound(ctx, args[0])

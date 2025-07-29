@@ -3,17 +3,16 @@ package cli
 
 const rootCommandName = ""
 
-const debugPrefix = "[cli:debug] "
-
 // debug message
 const (
-	debugReport = debugPrefix + "report bug: https://github.com/fyrna/cli/issues"
+	debugReport = "report bug: https://github.com/fyrna/cli/issues"
 
-	debugNoRootCommand    = debugPrefix + "no root command set yet"
-	debugNoHelpCommand    = debugPrefix + "no help command provided"
-	debugUsingDefaultHelp = debugPrefix + "using default help command"
+	debugNoRootCommand = "no root command set yet"
+	debugNoHelpCommand = "no help command provided"
 
-	debugArgsParsed = debugPrefix + "onii-chan, args parsed: %s"
+	debugUsingDefaultHelp = "using default help command"
+
+	debugArgsParsed = "onii-chan, args parsed: %s"
 )
 
 // err message
