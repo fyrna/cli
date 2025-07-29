@@ -35,7 +35,10 @@ type App struct {
 }
 
 type appConfig struct {
-	debug bool
+	debug        bool
+	log          *log.Logger
+	trace        bool
+	panicHandler func(any)
 }
 
 // Command is the canonical representation of a runnable thing.
@@ -82,11 +85,33 @@ func (n *node) get(parts []string) (*node, []string) {
 	return cur, nil
 }
 
+// internal debug function
+func (a *App) debugf(format string, v ...any) {
+	if !a.config.debug && !a.config.trace {
+		return
+	}
+	a.config.log.Printf("[%s] %s", a.Name, fmt.Sprintf(format, v...))
+}
+
+// internal recover wrapper
+func (a *App) safeExecute(c *Command, args []string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if a.config.panicHandler != nil {
+				a.config.panicHandler(r)
+			} else {
+				err = fmt.Errorf("panic: %v", r)
+			}
+		}
+	}()
+
+	return a.execute(c, args)
+}
+
 // Constructor
 func New(name string, opts ...ConfigOption) *App {
 	app := &App{
 		Name: name,
-		root: &node{subs: make(map[string]*node)},
 		OnNotFound: func(ctx *Context, s string) error {
 			fmt.Fprintf(ctx.App.Err, errCommandNotFound, s)
 			return nil
@@ -95,8 +120,13 @@ func New(name string, opts ...ConfigOption) *App {
 			fmt.Fprintln(ctx.App.Err, err)
 			return err
 		},
-		Out: os.Stdout,
-		Err: os.Stderr,
+		Out:  os.Stdout,
+		Err:  os.Stderr,
+		root: &node{subs: make(map[string]*node)},
+		config: appConfig{
+			debug: false,
+			log:   log.New(os.Stderr, "DEBUG ", log.Ltime|log.Lmicroseconds),
+		},
 	}
 
 	for _, o := range opts {
@@ -246,7 +276,7 @@ func (a *App) Parse(args []string) error {
 		log.Printf(debugArgsParsed, args)
 	}
 
-	return a.execute(n.cmd, args)
+	return a.safeExecute(n.cmd, args)
 }
 
 // Builtin runner
