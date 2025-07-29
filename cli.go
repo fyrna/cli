@@ -240,42 +240,36 @@ func (a *App) execute(c *Command, args []string) (err error) {
 
 // parser
 func (a *App) Parse(args []string) error {
-	if a.config.debug {
-		log.Println(debugReport)
-	}
+	a.debugf("%s", debugReport)
 
 	if len(args) == 0 {
-		if a.config.debug {
-			log.Println(debugNoRootCommand)
-			log.Println(debugUsingDefaultHelp)
-		}
+		a.debugf("%s", debugNoRootCommand)
 
 		// 1) root command
 		if a.root.cmd != nil {
+			a.debugf("executing root override")
 			return a.execute(a.root.cmd, []string{rootCommandName})
 		}
 
 		// 2) help command
 		h, ok := a.root.subs["help"]
 		if ok && h.cmd != nil {
+			a.debugf("executing help command")
 			return a.execute(h.cmd, []string{"help"})
 		}
 
 		// 3) default
+		a.debugf("showing default root help")
 		return a.ShowRootHelp()
 	}
 
 	n, rest := a.root.get(args)
-
 	if n.cmd == nil {
 		ctx := &Context{App: a, RawArgs: rest}
 		return a.OnNotFound(ctx, args[0])
 	}
 
-	if a.config.debug {
-		log.Printf(debugArgsParsed, args)
-	}
-
+	a.debugf(debugArgsParsed, args)
 	return a.safeExecute(n.cmd, args)
 }
 
@@ -283,7 +277,9 @@ func (a *App) Parse(args []string) error {
 func (a *App) Run() {
 	if err := a.Parse(os.Args[1:]); err != nil {
 		ctx := &Context{App: a}
-		a.OnError(ctx, err)
+		if err2 := a.OnError(ctx, err); err2 != nil {
+			a.config.log.Printf("OnError returned: %v", err2)
+		}
 		os.Exit(1)
 	}
 }
