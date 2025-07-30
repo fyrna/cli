@@ -265,18 +265,18 @@ func (a *App) Parse(args []string) error {
 
 	n, rest := a.root.get(args)
 
+	if n.cmd != nil {
+		a.debugf(debugArgsParsed, args)
+		return a.safeExecute(n.cmd, args)
+	}
+
+	ctx := &Context{App: a, RawArgs: rest}
+	name := args[0]
 	if len(rest) > 0 {
-		ctx := &Context{App: a, RawArgs: rest}
-		return a.OnNotFound(ctx, rest[0])
+		name = rest[0]
 	}
 
-	if n.cmd == nil {
-		ctx := &Context{App: a, RawArgs: rest}
-		return a.OnNotFound(ctx, args[0])
-	}
-
-	a.debugf(debugArgsParsed, args)
-	return a.safeExecute(n.cmd, args)
+	return a.OnNotFound(ctx, name)
 }
 
 // Builtin runner
