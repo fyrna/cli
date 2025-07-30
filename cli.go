@@ -21,19 +21,19 @@ type App struct {
 	OnNotFound NotFoundHandler
 	OnError    ErrorHandler
 
-	// I/O (pluggable)
+	// I/O streams used by the framework and user handlers.
+	// Default are os.Stdout and os.Stderr respectively.
 	Out io.Writer
 	Err io.Writer
 
-	// configuration
+	// Internal configuration populated by ConfigOption(s).
 	config appConfig
 
-	// internal use
-	root     *node
-	plugins  []Plugin
-	flatCmds map[string]*Command
+	root    *node    // Internal command tree.
+	plugins []Plugin // Registered plugins.
 }
 
+// appConfig holds non-exported settings modified through ConfigOption.
 type appConfig struct {
 	debug        bool
 	log          *log.Logger
@@ -41,7 +41,8 @@ type appConfig struct {
 	panicHandler func(any)
 }
 
-// Command is the canonical representation of a runnable thing.
+// Command represents a runnable sub-command. Name and Aliases are Only
+// Advisory; the actual registration path is determined by App.Command().
 type Command struct {
 	Name     string
 	Aliases  []string
@@ -50,24 +51,28 @@ type Command struct {
 	Long     string
 	Category string
 
-	Before func(*Context) error
-	Action func(*Context) error
-	After  func(*Context) error
+	Before func(*Context) error // Executed before Action.
+	Action func(*Context) error // Required logic; must be non-nil.
+	After  func(*Context) error // Executed after Action even if it errors.
 
 	Flags *flag.FlagSet
 }
 
-// Plugin is the extension point.
-type Plugin interface{ Install(*App) error }
+// Plugin is the extension point for reusable behaviour such as
+// middleware, extra commands or global flag injection
+type Plugin interface {
+	// Install is called once when the plugin is registered via App.Use.
+	Install(*App) error
+}
 
-// Handlers
+// NotFoundHandler is invoked when no matching command is found.
 type NotFoundHandler func(*Context, string) error
+
+// ErrorHandler is invoked whenever Command.Action, Before, or After
+// returns a non-nil error.
 type ErrorHandler func(*Context, error) error
 
-// handler for print all commands
-func (a *App) Commands() map[string]*Command { return a.flatCmds }
-
-// Internal tree node
+// node is the internal command tree nkde.
 type node struct {
 	cmd  *Command
 	subs map[string]*node
@@ -85,7 +90,15 @@ func (n *node) get(parts []string) (*node, []string) {
 	return cur, nil
 }
 
-// internal debug function
+// --- internal helper ---
+func isBuiltin(name string) bool {
+	switch name {
+	case "version", "help", "verbose":
+		return true
+	}
+	return false
+}
+
 func (a *App) debugf(format string, v ...any) {
 	if !a.config.debug && !a.config.trace {
 		return
@@ -93,19 +106,29 @@ func (a *App) debugf(format string, v ...any) {
 	a.config.log.Printf("[%s] %s", a.Name, fmt.Sprintf(format, v...))
 }
 
-// internal recover wrapper
-func (a *App) safeExecute(c *Command, args []string) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if a.config.panicHandler != nil {
-				a.config.panicHandler(r)
-			} else {
-				err = fmt.Errorf("panic: %v", r)
-			}
-		}
-	}()
+// add inserts cmd into the tree at the given path.
+func (a *App) add(path string, cmd *Command) *App {
+	// root override
+	if path == rootCommandName {
+		a.root.cmd = cmd
+		return a
+	}
 
-	return a.execute(c, args)
+	parts := strings.Split(path, " ")
+	cur, _ := a.root.get(parts[:len(parts)-1])
+	name := parts[len(parts)-1]
+
+	if _, ok := cur.subs[name]; ok {
+		if isBuiltin(name) {
+			delete(cur.subs, name)
+		} else {
+			panic(errDuplicateCommand + path)
+		}
+	}
+
+	cmd.Name = name
+	cur.subs[name] = &node{cmd: cmd, subs: make(map[string]*node)}
+	return a
 }
 
 // Constructor
@@ -138,6 +161,7 @@ func New(name string, opts ...ConfigOption) *App {
 	return app
 }
 
+// Command registers a new sub-command at the given path.
 func (a *App) Command(path string, actionOrOps ...any) *App {
 	cmd := &Command{Name: path}
 
@@ -157,39 +181,9 @@ func (a *App) Command(path string, actionOrOps ...any) *App {
 	return a.add(path, cmd)
 }
 
-func isBuiltin(name string) bool {
-	switch name {
-	case "version", "help", "verbose":
-		return true
-	}
-	return false
-}
-
-func (a *App) add(path string, cmd *Command) *App {
-	// root override
-	if path == rootCommandName {
-		a.root.cmd = cmd
-		return a
-	}
-
-	parts := strings.Split(path, " ")
-	cur, _ := a.root.get(parts[:len(parts)-1])
-	name := parts[len(parts)-1]
-
-	if _, ok := cur.subs[name]; ok {
-		if isBuiltin(name) {
-			delete(cur.subs, name)
-		} else {
-			panic(errDuplicateCommand + path)
-		}
-	}
-
-	cmd.Name = name
-	cur.subs[name] = &node{cmd: cmd, subs: make(map[string]*node)}
-	return a
-}
-
-// Installing plugins
+// Use registers zero or more plugins
+//
+//	app.Use(plugin1(), plugin2(), ...)
 func (a *App) Use(p ...Plugin) *App {
 	for _, pl := range p {
 		if err := pl.Install(a); err != nil {
@@ -199,6 +193,7 @@ func (a *App) Use(p ...Plugin) *App {
 	return a
 }
 
+// --- execution helpers ---
 func (a *App) execute(c *Command, args []string) (err error) {
 	fs := c.Flags
 	if fs == nil {
@@ -238,7 +233,21 @@ func (a *App) execute(c *Command, args []string) (err error) {
 	return c.Action(ctx)
 }
 
-// parser
+// internal recover wrapper
+func (a *App) safeExecute(c *Command, args []string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if a.config.panicHandler != nil {
+				a.config.panicHandler(r)
+			} else {
+				err = fmt.Errorf("panic: %v", r)
+			}
+		}
+	}()
+
+	return a.execute(c, args)
+}
+
 func (a *App) Parse(args []string) error {
 	a.debugf("%s", debugReport)
 
@@ -279,7 +288,6 @@ func (a *App) Parse(args []string) error {
 	return a.OnNotFound(ctx, name)
 }
 
-// Builtin runner
 func (a *App) Run() {
 	if err := a.Parse(os.Args[1:]); err != nil {
 		ctx := &Context{App: a}
