@@ -269,7 +269,7 @@ func (a *App) Parse(args []string) error {
 
 		// 3) default
 		a.debugf("showing default root help")
-		return a.ShowRootHelp()
+		return a.PrintRootHelp()
 	}
 
 	n, rest := a.root.get(args)

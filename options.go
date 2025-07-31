@@ -1,3 +1,4 @@
+// fyrna/cli is a tiny, flexible command-line micro-framework
 package cli
 
 import (
