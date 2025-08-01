@@ -73,14 +73,14 @@ type ErrorHandler func(*Context, error) error
 
 // node is the internal command tree nkde.
 type node struct {
-	cmd  *Command
-	subs map[string]*node
+	cmd   *Command
+	child map[string]*node
 }
 
 func (n *node) get(parts []string) (*node, []string) {
 	cur := n
 	for i, p := range parts {
-		next, ok := cur.subs[p]
+		next, ok := cur.child[p]
 		if !ok {
 			return cur, parts[i:]
 		}
@@ -108,7 +108,7 @@ func (a *App) debugf(format string, v ...any) {
 // add inserts cmd into the tree at the given path.
 func (a *App) add(path string, cmd *Command) *App {
 	// root override
-	if path == rootCommandName {
+	if path == rootCommandPath {
 		a.root.cmd = cmd
 		return a
 	}
@@ -117,16 +117,16 @@ func (a *App) add(path string, cmd *Command) *App {
 	cur, _ := a.root.get(parts[:len(parts)-1])
 	name := parts[len(parts)-1]
 
-	if _, ok := cur.subs[name]; ok {
+	if _, ok := cur.child[name]; ok {
 		if isBuiltin(name) {
-			delete(cur.subs, name)
+			delete(cur.child, name)
 		} else {
-			panic(errDuplicateCommand + path)
+			panic(fmt.Sprintf(errDuplicateCommand, path))
 		}
 	}
 
 	cmd.Name = name
-	cur.subs[name] = &node{cmd: cmd, subs: make(map[string]*node)}
+	cur.child[name] = &node{cmd: cmd, child: make(map[string]*node)}
 	return a
 }
 
@@ -144,10 +144,10 @@ func New(name string, opts ...ConfigOption) *App {
 		},
 		Out:  os.Stdout,
 		Err:  os.Stderr,
-		root: &node{subs: make(map[string]*node)},
+		root: &node{child: make(map[string]*node)},
 		config: appConfig{
 			debug: false,
-			log:   log.New(os.Stderr, "DEBUG ", log.Ltime|log.Lmicroseconds),
+			log:   log.New(os.Stderr, "[DEBUG] ", log.Ltime),
 		},
 	}
 
@@ -184,7 +184,12 @@ func (a *App) Command(path string, actionOrOps ...any) *App {
 //
 //	app.Use(plugin1(), plugin2(), ...)
 func (a *App) Use(p ...Plugin) *App {
-	for _, pl := range p {
+	for i, pl := range p {
+		if pl == nil {
+			a.debugf("plugin at index %d is nil", i)
+			continue
+		}
+
 		if err := pl.Install(a); err != nil {
 			panic(err)
 		}
@@ -194,6 +199,10 @@ func (a *App) Use(p ...Plugin) *App {
 
 // --- execution helpers ---
 func (a *App) execute(c *Command, args []string) (err error) {
+	if c == nil {
+		return fmt.Errorf(errNilCommand)
+	}
+
 	fs := c.Flags
 	if fs == nil {
 		fs = flag.NewFlagSet(c.Name, flag.ContinueOnError)
@@ -201,6 +210,10 @@ func (a *App) execute(c *Command, args []string) (err error) {
 
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
+	}
+
+	if c.Action == nil {
+		return fmt.Errorf(errNoAction, c.Name)
 	}
 
 	ctx := &Context{
@@ -214,10 +227,6 @@ func (a *App) execute(c *Command, args []string) (err error) {
 		if err = c.Before(ctx); err != nil {
 			return err
 		}
-	}
-
-	if c.Action == nil {
-		return fmt.Errorf(errNoAction, c.Name)
 	}
 
 	defer func() {
@@ -254,14 +263,14 @@ func (a *App) Parse(args []string) error {
 
 		// 1) root command
 		if a.root.cmd != nil {
-			a.debugf("executing root override")
-			return a.execute(a.root.cmd, []string{rootCommandName})
+			a.debugf("executing root command override")
+			return a.execute(a.root.cmd, []string{rootCommandPath})
 		}
 
 		// 2) help command
-		h, ok := a.root.subs["help"]
+		h, ok := a.root.child["help"]
 		if ok && h.cmd != nil {
-			a.debugf("executing help command")
+			a.debugf("falling back to help command")
 			return a.execute(h.cmd, []string{"help"})
 		}
 

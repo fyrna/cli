@@ -1,7 +1,7 @@
 package cli
 
 const (
-	rootCommandName = "" // internal sentinel for root override
+	rootCommandPath = "" // internal sentinel for root override
 )
 
 // Debug/trace messages.
@@ -15,7 +15,9 @@ const (
 
 // User-facing error messages.
 const (
+	errNilCommand       = "nil command"
+	errNilPlugin        = "nil plugin"
 	errNoAction         = "onii-chan, no action defined for %s"
 	errCommandNotFound  = "command %s not found\n"
-	errDuplicateCommand = "duplicate command: "
+	errDuplicateCommand = "duplicate command: %s"
 )

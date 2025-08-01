@@ -23,7 +23,7 @@ type printAppVersion struct{}
 
 func (pav printAppVersion) Install(a *App) error {
 	// Honour user-supplied "version" command.
-	if _, ok := a.root.subs["version"]; ok {
+	if _, ok := a.root.child["version"]; ok {
 		return nil
 	}
 
