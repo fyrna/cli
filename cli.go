@@ -2,7 +2,6 @@
 package cli
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -93,7 +92,7 @@ func (n *node) get(parts []string) (*node, []string) {
 // --- internal helper ---
 func isBuiltin(name string) bool {
 	switch name {
-	case "version", "help", "verbose":
+	case "version", "help":
 		return true
 	}
 	return false
@@ -209,7 +208,6 @@ func (a *App) execute(c *Command, args []string) (err error) {
 		Cmd:     c,
 		RawArgs: args,
 		Flags:   fs,
-		Store:   make(map[string]any),
 	}
 
 	if c.Before != nil {
@@ -219,7 +217,7 @@ func (a *App) execute(c *Command, args []string) (err error) {
 	}
 
 	if c.Action == nil {
-		return errors.New("onii-chan.. no action defined")
+		return fmt.Errorf(errNoAction, c.Name)
 	}
 
 	defer func() {

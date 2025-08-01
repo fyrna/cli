@@ -1,20 +1,17 @@
-// fyrna/cli is a tiny, flexible command-line micro-framework
 package cli
 
 import (
-	"flag"
 	"io"
 	"log"
 )
 
-// :: config
 type ConfigOption func(*App)
 
 // app config
 
 // set app version
 func SetVersion(v string) ConfigOption {
-	return func(a *App) { a.Version = string(v) }
+	return func(a *App) { a.Version = v }
 }
 
 // set app description
@@ -30,7 +27,7 @@ func FluxDebug(on bool) ConfigOption {
 }
 
 // custom output for debug option
-// using's std log.SetOutput()
+// anything support io.Writer
 func FluxDebugOutput(w io.Writer) ConfigOption {
 	return func(a *App) {
 		a.config.log.SetOutput(w)
@@ -38,14 +35,8 @@ func FluxDebugOutput(w io.Writer) ConfigOption {
 }
 
 // custom logger
-// should compatible and/or just use stdlib's logger
 func FluxLogger(l *log.Logger) ConfigOption {
 	return func(a *App) { a.config.log = l }
-}
-
-// tracing
-func FluxTrace(on bool) ConfigOption {
-	return func(a *App) { a.config.trace = on }
 }
 
 // set panic handler
@@ -53,7 +44,7 @@ func FluxPanicHandler(fn func(any)) ConfigOption {
 	return func(a *App) { a.config.panicHandler = fn }
 }
 
-// :: command
+// config for command
 type CommandOption func(*Command)
 type fun func(*Context) error
 
@@ -72,28 +63,27 @@ func After(fn fun) CommandOption {
 	return func(c *Command) { c.After = fn }
 }
 
+// short description for defined command
 func Short(s string) CommandOption {
 	return func(c *Command) { c.Short = s }
 }
 
+// long description about defined command
 func Long(s string) CommandOption {
 	return func(c *Command) { c.Long = s }
 }
 
+// set aliases for command
 func Alias(a ...string) CommandOption {
 	return func(c *Command) { c.Aliases = a }
 }
 
+// information about command's usage
 func Usage(u string) CommandOption {
 	return func(c *Command) { c.Usage = u }
 }
 
+// categorizing command
 func Category(cat string) CommandOption {
 	return func(c *Command) { c.Category = cat }
 }
-
-func Flags(fs *flag.FlagSet) CommandOption {
-	return func(c *Command) { c.Flags = fs }
-}
-
-// help me add comment to every pub function :(

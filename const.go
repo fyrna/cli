@@ -1,4 +1,3 @@
-// fyrna/cli is a tiny, flexible command-line micro-framework.
 package cli
 
 const (
@@ -16,6 +15,7 @@ const (
 
 // User-facing error messages.
 const (
+	errNoAction         = "onii-chan, no action defined for %s"
 	errCommandNotFound  = "command %s not found\n"
 	errDuplicateCommand = "duplicate command: "
 )
