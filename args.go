@@ -20,7 +20,7 @@ func (a Args) Get(i int) string {
 	return a[i]
 }
 
-// All returns all positional arguments as a single space-separated string.
-func (a Args) All() string {
+// String returns all positional arguments as a single space-separated string.
+func (a Args) String() string {
 	return strings.Join(a, " ")
 }
