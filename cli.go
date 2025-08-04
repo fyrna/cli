@@ -30,6 +30,7 @@ type App struct {
 
 	root    *node    // Internal command tree.
 	plugins []Plugin // Registered plugins.
+	globals []Flag   // global flags
 }
 
 // appConfig holds non-exported settings modified through ConfigOption.
@@ -106,11 +107,11 @@ func (a *App) debugf(format string, v ...any) {
 }
 
 // add inserts cmd into the tree at the given path.
-func (a *App) add(path string, cmd *Command) *App {
+func (a *App) add(path string, cmd *Command) (*App, error) {
 	// root override
 	if path == rootCommandPath {
 		a.root.cmd = cmd
-		return a
+		return a, nil
 	}
 
 	parts := strings.Split(path, " ")
@@ -121,13 +122,13 @@ func (a *App) add(path string, cmd *Command) *App {
 		if isBuiltin(name) {
 			delete(cur.child, name)
 		} else {
-			panic(fmt.Sprintf(errDuplicateCommand, path))
+			return nil, fmt.Errorf(errDuplicateCommand, path)
 		}
 	}
 
 	cmd.Name = name
 	cur.child[name] = &node{cmd: cmd, child: make(map[string]*node)}
-	return a
+	return a, nil
 }
 
 // Constructor
@@ -161,7 +162,7 @@ func New(name string, opts ...ConfigOption) *App {
 }
 
 // Command registers a new sub-command at the given path.
-func (a *App) Command(path string, actionOrOps ...any) *App {
+func (a *App) Command(path string, actionOrOps ...any) (*App, error) {
 	cmd := &Command{Name: path}
 
 	if len(actionOrOps) == 1 {
@@ -200,15 +201,49 @@ func (a *App) Use(p ...Plugin) *App {
 // --- execution helpers ---
 func (a *App) execute(c *Command, args []string) (err error) {
 	if c == nil {
+		if len(args) == 0 && a.root.cmd != nil {
+			c = a.root.cmd
+		}
 		return fmt.Errorf(errNilCommand)
 	}
 
+	if c.Flags == nil {
+		c.Flags = flag.NewFlagSet(c.Name, flag.ContinueOnError)
+	}
+
+	if c == a.root.cmd {
+		args = append([]string{""}, args...)
+	}
+
 	fs := c.Flags
-	if fs == nil {
-		fs = flag.NewFlagSet(c.Name, flag.ContinueOnError)
+
+	for _, gf := range a.globals {
+		gf.apply(fs)
 	}
 
 	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+
+	// validate required flags & ranges
+	c.Flags.VisitAll(func(f *flag.Flag) {
+		req, ok := f.Value.(interface{ Required() bool })
+		if ok && req.Required() {
+			if !isFlagPassed(c.Flags, f.Name) {
+				err = fmt.Errorf("required flag --%s not provided", f.Name)
+			}
+		}
+
+		v, ok := f.Value.(interface{ Validate() error })
+		if ok {
+			e := v.Validate()
+			if e != nil {
+				err = e
+			}
+		}
+	})
+
+	if err != nil {
 		return err
 	}
 
@@ -279,20 +314,29 @@ func (a *App) Parse(args []string) error {
 		return a.PrintRootHelp()
 	}
 
+	// Check if the first argument is a known command
 	n, rest := a.root.get(args)
-
 	if n.cmd != nil {
-		a.debugf(debugArgsParsed, args)
-		return a.safeExecute(n.cmd, args)
+		if len(rest) == 0 { // Exact command match
+			a.debugf(debugArgsParsed, args)
+			return a.safeExecute(n.cmd, args)
+		}
+
+		// Check if remaining parts are flags
+		if strings.HasPrefix(rest[0], "-") {
+			return a.safeExecute(n.cmd, args)
+		}
 	}
 
-	ctx := &Context{App: a, RawArgs: rest}
-	name := args[0]
-	if len(rest) > 0 {
-		name = rest[0]
+	// If we get here, it's either:
+	// 1. A global flag
+	// 2. An unknown command
+	if a.root.cmd != nil && (len(args) == 0 || strings.HasPrefix(args[0], "-")) {
+		return a.safeExecute(a.root.cmd, args)
 	}
 
-	return a.OnNotFound(ctx, name)
+	// Otherwise show command not found
+	return a.OnNotFound(&Context{App: a}, args[0])
 }
 
 func (a *App) Run() {
