@@ -10,6 +10,9 @@ import (
 	"strings"
 )
 
+// internal sentinel for root override
+const rootCommandPath = ""
+
 // App is the root CLI application.
 type App struct {
 	Name    string
@@ -122,7 +125,7 @@ func (a *App) add(path string, cmd *Command) (*App, error) {
 		if isBuiltin(name) {
 			delete(cur.child, name)
 		} else {
-			return nil, fmt.Errorf(errDuplicateCommand, path)
+			return nil, fmt.Errorf("duplicate command: %s", path)
 		}
 	}
 
@@ -136,7 +139,7 @@ func New(name string, opts ...ConfigOption) *App {
 	app := &App{
 		Name: name,
 		OnNotFound: func(ctx *Context, s string) error {
-			fmt.Fprintf(ctx.App.Err, errCommandNotFound, s)
+			fmt.Fprintf(ctx.App.Err, "command %s not found\n", s)
 			return nil
 		},
 		OnError: func(ctx *Context, err error) error {
@@ -161,7 +164,17 @@ func New(name string, opts ...ConfigOption) *App {
 	return app
 }
 
-// Command registers a new sub-command at the given path.
+// Command adds a new command to your CLI application.
+// The path determines where the command lives in your command hierarchy.
+// For example:
+//
+//	app.Command("server start", ...)  // Creates nested "server start" command
+//	app.Command("status", ...)        // Creates top-level "status" command
+//
+// You can provide either an action function or configuration options:
+//
+//	app.Command("hello", func(c *cli.Context) error { ... })
+//	app.Command("hello", cli.Action(...), cli.Short("Greets the user"))
 func (a *App) Command(path string, actionOrOps ...any) (*App, error) {
 	cmd := &Command{Name: path}
 
@@ -183,7 +196,7 @@ func (a *App) Command(path string, actionOrOps ...any) (*App, error) {
 
 // Use registers zero or more plugins
 //
-//	app.Use(plugin1(), plugin2(), ...)
+//	app.Use(&plugin1{}, &plugin2{}, ...)
 func (a *App) Use(p ...Plugin) *App {
 	for i, pl := range p {
 		if pl == nil {
@@ -204,7 +217,7 @@ func (a *App) execute(c *Command, args []string) (err error) {
 		if len(args) == 0 && a.root.cmd != nil {
 			c = a.root.cmd
 		}
-		return fmt.Errorf(errNilCommand)
+		return fmt.Errorf("no command defined: status Nil Command")
 	}
 
 	if c.Flags == nil {
@@ -243,12 +256,8 @@ func (a *App) execute(c *Command, args []string) (err error) {
 		}
 	})
 
-	if err != nil {
-		return err
-	}
-
 	if c.Action == nil {
-		return fmt.Errorf(errNoAction, c.Name)
+		return fmt.Errorf("no action defined for: %s", c.Name)
 	}
 
 	ctx := &Context{
@@ -291,22 +300,22 @@ func (a *App) safeExecute(c *Command, args []string) (err error) {
 }
 
 func (a *App) Parse(args []string) error {
-	a.debugf("%s", debugReport)
+	a.debugf("bug report: https://github.com/fyrna/cli/issues")
 
 	if len(args) == 0 {
-		a.debugf("%s", debugNoRootCommand)
+		a.debugf("no root command set yet")
 
 		// 1) root command
 		if a.root.cmd != nil {
 			a.debugf("executing root command override")
-			return a.execute(a.root.cmd, []string{rootCommandPath})
+			return a.safeExecute(a.root.cmd, []string{rootCommandPath})
 		}
 
 		// 2) help command
 		h, ok := a.root.child["help"]
 		if ok && h.cmd != nil {
 			a.debugf("falling back to help command")
-			return a.execute(h.cmd, []string{"help"})
+			return a.safeExecute(h.cmd, []string{"help"})
 		}
 
 		// 3) default
@@ -318,7 +327,7 @@ func (a *App) Parse(args []string) error {
 	n, rest := a.root.get(args)
 	if n.cmd != nil {
 		if len(rest) == 0 { // Exact command match
-			a.debugf(debugArgsParsed, args)
+			a.debugf("onii-chan, args parsed: %s", args)
 			return a.safeExecute(n.cmd, args)
 		}
 
