@@ -5,9 +5,8 @@ import (
 	"log"
 )
 
-type ConfigOption func(*App)
-
 // app config
+type ConfigOption func(*App)
 
 // set app version
 func SetVersion(v string) ConfigOption {
@@ -46,20 +45,14 @@ func FluxPanicHandler(fn func(any)) ConfigOption {
 
 // config for command
 type CommandOption func(*Command)
-type fun func(*Context) error
-
-// what defined command should do?
-func Action(fn fun) CommandOption {
-	return func(c *Command) { c.Action = fn }
-}
 
 // execute before action
-func Before(fn fun) CommandOption {
+func Before(fn func(*Context) error) CommandOption {
 	return func(c *Command) { c.Before = fn }
 }
 
 // execute after action
-func After(fn fun) CommandOption {
+func After(fn func(*Context) error) CommandOption {
 	return func(c *Command) { c.After = fn }
 }
 

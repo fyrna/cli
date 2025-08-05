@@ -187,20 +187,11 @@ func New(name string, opts ...ConfigOption) *App {
 //
 //	app.Command("hello", func(c *cli.Context) error { ... })
 //	app.Command("hello", cli.Action(...), cli.Short("Greets the user"))
-func (a *App) Command(path string, actionOrOps ...any) (*App, error) {
-	cmd := &Command{Name: path}
+func (a *App) Command(path string, fn func(*Context) error, opts ...CommandOption) (*App, error) {
+	cmd := &Command{Name: path, Action: fn}
 
-	if len(actionOrOps) == 1 {
-		if fn, ok := actionOrOps[0].(func(*Context) error); ok {
-			cmd.Action = fn
-			return a.add(path, cmd)
-		}
-	}
-
-	for _, opt := range actionOrOps {
-		if o, ok := opt.(CommandOption); ok {
-			o(cmd)
-		}
+	for _, o := range opts {
+		o(cmd)
 	}
 
 	return a.add(path, cmd)
