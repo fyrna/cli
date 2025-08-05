@@ -69,7 +69,7 @@ type Command struct {
 // middleware, extra commands or global flag injection
 type Plugin interface {
 	// Install is called once when the plugin is registered via App.Use.
-	Install(*App) error
+	Sparkle(*App) error
 }
 
 // NotFoundHandler is invoked when no matching command is found.
@@ -171,7 +171,7 @@ func New(name string, opts ...ConfigOption) *App {
 		o(app)
 	}
 
-	app.Use(printAppVersion{})
+	app.Adopt(printAppVersion{})
 
 	return app
 }
@@ -200,14 +200,14 @@ func (a *App) Command(path string, fn func(*Context) error, opts ...CommandOptio
 // Use registers zero or more plugins
 //
 //	app.Use(&plugin1{}, &plugin2{}, ...)
-func (a *App) Use(p ...Plugin) *App {
+func (a *App) Adopt(p ...Plugin) *App {
 	for i, pl := range p {
 		if pl == nil {
 			a.debugf("plugin at index %d is nil", i)
 			continue
 		}
 
-		if err := pl.Install(a); err != nil {
+		if err := pl.Sparkle(a); err != nil {
 			panic(err)
 		}
 	}
