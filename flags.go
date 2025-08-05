@@ -5,7 +5,9 @@ import (
 	"fmt"
 )
 
-// Flag is implemented by the concrete flag builders below.
+// Flag represents a command line flag that can be attached
+// to commands. Use the spesific flag types like String(), Bool(),
+// or Int() to create flags with different value types.
 type Flag interface {
 	apply(*flag.FlagSet)
 }

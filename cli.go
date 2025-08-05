@@ -13,7 +13,11 @@ import (
 // internal sentinel for root override
 const rootCommandPath = ""
 
-// App is the root CLI application.
+// App represents your command line application.
+// Create on using New() and configure it with "settings", commands, and flags
+//
+//	app := cli.New("app")
+//	app.Command("serve", func(c *cli.Context) error { ... })
 type App struct {
 	Name    string
 	Version string
@@ -25,8 +29,8 @@ type App struct {
 
 	// I/O streams used by the framework and user handlers.
 	// Default are os.Stdout and os.Stderr respectively.
-	Out io.Writer
-	Err io.Writer
+	Out io.Writer // normal command output
+	Err io.Writer // error messages output
 
 	// Internal configuration populated by ConfigOption(s).
 	config appConfig
@@ -134,7 +138,15 @@ func (a *App) add(path string, cmd *Command) (*App, error) {
 	return a, nil
 }
 
-// Constructor
+// New creates a fresh CLI application ready for configuration.
+// The name should match your executable name (e.g. "git" or "docker").
+// Can be configure with settings:
+//
+//	app := cli.New("app",
+//	  cli.SetVersion("1.5"),
+//	  cli.FluxDebug(true),
+//	  // and more...
+//	)
 func New(name string, opts ...ConfigOption) *App {
 	app := &App{
 		Name: name,
@@ -324,23 +336,16 @@ func (a *App) Parse(args []string) error {
 	}
 
 	// Check if the first argument is a known command
-	n, rest := a.root.get(args)
-	if n.cmd != nil {
-		if len(rest) == 0 { // Exact command match
-			a.debugf("onii-chan, args parsed: %s", args)
-			return a.safeExecute(n.cmd, args)
-		}
-
-		// Check if remaining parts are flags
-		if strings.HasPrefix(rest[0], "-") {
-			return a.safeExecute(n.cmd, args)
-		}
+	// and NOT a root command
+	n, _ := a.root.get(args)
+	if n.cmd != nil && n.cmd.Name != "" {
+		return a.safeExecute(n.cmd, args)
 	}
 
 	// If we get here, it's either:
 	// 1. A global flag
 	// 2. An unknown command
-	if a.root.cmd != nil && (len(args) == 0 || strings.HasPrefix(args[0], "-")) {
+	if a.root.cmd != nil && strings.HasPrefix(args[0], "-") {
 		return a.safeExecute(a.root.cmd, args)
 	}
 
@@ -348,6 +353,7 @@ func (a *App) Parse(args []string) error {
 	return a.OnNotFound(&Context{App: a}, args[0])
 }
 
+// Run executes the application with os.Args and handles errors
 func (a *App) Run() {
 	if err := a.Parse(os.Args[1:]); err != nil {
 		ctx := &Context{App: a}
