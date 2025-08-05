@@ -1,40 +1,38 @@
 package cli
 
-import (
-	"fmt"
-)
+import "fmt"
 
-// minimal help
-func (a *App) ShowRootHelp() error {
+// default help using app.Out as its output
+func (a *App) PrintRootHelp() error {
 	if a.Version != "" {
-		fmt.Fprintf(a.Out, "%s - %s\n", a.Name, a.Version)
+		fmt.Fprintf(a.Out, "%s - v%s\n", a.Name, a.Version)
 	} else {
 		fmt.Fprintf(a.Out, "%s\n", a.Name)
 	}
 
 	if a.Desc != "" {
-		fmt.Fprintf(a.Out, "\t%s\n", a.Desc)
+		fmt.Fprintf(a.Out, "\n%s\n", a.Desc)
 	}
 
 	return nil
 }
 
-// print version
+// printAppVersion is a built-in plugin that adds a "version"
+// command unless the user has already defined one.
 type printAppVersion struct{}
 
-// youre my pav <3
 func (pav printAppVersion) Install(a *App) error {
-	if _, ok := a.root.subs["version"]; ok {
+	// Honour user-supplied "version" command.
+	if _, ok := a.root.child["version"]; ok {
 		return nil
 	}
 
 	a.Command("version", func(c *Context) error {
-		if c.App.Version != "" {
-			fmt.Fprintf(c.App.Out, "version %s", c.App.Version)
-			return nil
+		if c.App.Version == "" {
+			return fmt.Errorf("version not set")
 		}
-
-		return fmt.Errorf("please set your app version")
+		_, err := fmt.Fprintln(c.App.Out, c.App.Version)
+		return err
 	})
 
 	return nil
