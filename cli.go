@@ -38,6 +38,7 @@ type App struct {
 	root    *node    // Internal command tree.
 	plugins []Plugin // Registered plugins.
 	globals []Flag   // global flags
+	hooks   *HookManager
 }
 
 // appConfig holds non-exported settings modified through ConfigOption.
@@ -79,7 +80,7 @@ type NotFoundHandler func(*Context, string) error
 // returns a non-nil error.
 type ErrorHandler func(*Context, error) error
 
-// node is the internal command tree nkde.
+// Internal tree node
 type node struct {
 	cmd   *Command
 	child map[string]*node
@@ -197,6 +198,13 @@ func (a *App) Command(path string, fn func(*Context) error, opts ...CommandOptio
 	return a.add(path, cmd)
 }
 
+func (a *App) Hook() *HookManager {
+	if a.hooks == nil {
+		a.hooks = newHookManager(a)
+	}
+	return a.hooks
+}
+
 // Use registers zero or more plugins
 //
 //	app.Use(&plugin1{}, &plugin2{}, ...)
@@ -268,7 +276,23 @@ func (a *App) execute(c *Command, args []string) (err error) {
 		Cmd:     c,
 		RawArgs: args,
 		Flags:   fs,
+		Store:   make(map[string]any),
 	}
+
+	if a.hooks != nil {
+		if err := a.hooks.trigger("before_command", ctx, c); err != nil {
+			return err
+		}
+	}
+
+	defer func() {
+		// Trigger after_command hook
+		if a.hooks != nil {
+			if hookErr := a.hooks.trigger("after_command", ctx, c); hookErr != nil && err == nil {
+				err = hookErr
+			}
+		}
+	}()
 
 	if c.Before != nil {
 		if err = c.Before(ctx); err != nil {
@@ -290,6 +314,15 @@ func (a *App) execute(c *Command, args []string) (err error) {
 // internal recover wrapper
 func (a *App) safeExecute(c *Command, args []string) (err error) {
 	defer func() {
+		if a.hooks != nil {
+			ctx := &Context{App: a, Cmd: c, RawArgs: args}
+			hookErr := a.hooks.trigger("after_root", ctx)
+
+			if hookErr != nil && err == nil {
+				err = hookErr
+			}
+		}
+
 		if r := recover(); r != nil {
 			if a.config.panicHandler != nil {
 				a.config.panicHandler(r)
@@ -299,11 +332,35 @@ func (a *App) safeExecute(c *Command, args []string) (err error) {
 		}
 	}()
 
+	// trigger BeforeRoot hooks
+	if a.hooks != nil {
+		ctx := &Context{App: a, Cmd: c, RawArgs: args}
+		if err := a.hooks.trigger("before_root", ctx); err != nil {
+			return err
+		}
+	}
+
 	return a.execute(c, args)
 }
 
 func (a *App) Parse(args []string) error {
 	a.debugf("bug report: https://github.com/fyrna/cli/issues")
+
+	ctx := &Context{App: a, RawArgs: args}
+
+	// Trigger before_parse hook
+	if a.hooks != nil {
+		if err := a.hooks.trigger("before_parse", ctx, args); err != nil {
+			return err
+		}
+	}
+
+	defer func() {
+		// Trigger after_parse hook
+		if a.hooks != nil {
+			a.hooks.trigger("after_parse", ctx, args)
+		}
+	}()
 
 	if len(args) == 0 {
 		a.debugf("no root command set yet")
@@ -328,7 +385,7 @@ func (a *App) Parse(args []string) error {
 
 	// Check if the first argument is a known command
 	// and NOT a root command
-	n, _ := a.root.get(args)
+	n, rest := a.root.get(args)
 	if n.cmd != nil && n.cmd.Name != "" {
 		return a.safeExecute(n.cmd, args)
 	}
@@ -341,6 +398,10 @@ func (a *App) Parse(args []string) error {
 	}
 
 	// Otherwise show command not found
+	if a.Hook().HasHook("not_found") {
+		return a.hooks.trigger("not_found", ctx, rest[0])
+	}
+
 	return a.OnNotFound(&Context{App: a}, args[0])
 }
 

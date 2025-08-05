@@ -11,6 +11,7 @@ type Context struct {
 	App     *App     // Reference to the CLI application.
 	Cmd     *Command // The command currently being executed.
 	RawArgs []string // Unprocessed arguments (including name).
+	Store   map[string]any
 	Flags   *flag.FlagSet
 }
 
