@@ -17,7 +17,7 @@ const rootCommandPath = ""
 // Create on using New() and configure it with "settings", commands, and flags
 //
 //	app := cli.New("app")
-//	app.Command("serve", func(c *cli.Context) error { ... })
+//	app.Command()
 type App struct {
 	Name    string
 	Version string
@@ -183,10 +183,12 @@ func New(name string, opts ...ConfigOption) *App {
 //	app.Command("server start", ...)  // Creates nested "server start" command
 //	app.Command("status", ...)        // Creates top-level "status" command
 //
-// You can provide either an action function or configuration options:
+// You can provide configuration options:
 //
 //	app.Command("hello", func(c *cli.Context) error { ... })
-//	app.Command("hello", cli.Action(...), cli.Short("Greets the user"))
+//	app.Command("hello", func(c *cli.Context) error { ... },
+//	    cli.Short(...),
+//	    cli.Usage(...))
 func (a *App) Command(path string, fn func(*Context) error, opts ...CommandOption) (*App, error) {
 	cmd := &Command{Name: path, Action: fn}
 
@@ -197,9 +199,9 @@ func (a *App) Command(path string, fn func(*Context) error, opts ...CommandOptio
 	return a.add(path, cmd)
 }
 
-// Use registers zero or more plugins
+// Adopt registers zero or more plugins
 //
-//	app.Use(&plugin1{}, &plugin2{}, ...)
+//	app.Adopt(&plugin1{}, &plugin2{}, ...)
 func (a *App) Adopt(p ...Plugin) *App {
 	for i, pl := range p {
 		if pl == nil {
