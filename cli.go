@@ -349,7 +349,7 @@ func (a *App) Run() {
 	if err := a.Parse(os.Args[1:]); err != nil {
 		ctx := &Context{App: a}
 		if err2 := a.OnError(ctx, err); err2 != nil {
-			a.config.log.Printf("OnError returned: %v", err2)
+			a.debugf("OnError returned: %v", err2)
 		}
 		os.Exit(1)
 	}
