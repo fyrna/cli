@@ -80,3 +80,9 @@ func Usage(u string) CommandOption {
 func Category(cat string) CommandOption {
 	return func(c *Command) { c.Category = cat }
 }
+
+// help flag handler
+// Nil falls back to PrintRootHelp.
+func BuiltinHelpFlag(fn func(*Context) error) ConfigOption {
+	return func(a *App) { a.helpFlagAction = fn }
+}
