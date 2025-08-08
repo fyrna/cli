@@ -17,11 +17,9 @@ func (a *App) PrintRootHelp() error {
 	return nil
 }
 
-// printAppVersion is a built-in plugin that adds a "version"
-// command unless the user has already defined one.
-type printAppVersion struct{}
+type BuiltinPlugin struct{}
 
-func (pav printAppVersion) Sparkle(a *App) error {
+func (p BuiltinPlugin) Sparkle(a *App) error {
 	// Honour user-supplied "version" command.
 	if _, ok := a.root.child["version"]; ok {
 		return nil
@@ -34,6 +32,9 @@ func (pav printAppVersion) Sparkle(a *App) error {
 		_, err := fmt.Fprintln(c.App.Out, c.App.Version)
 		return err
 	})
+
+	// builtin help flag
+	a.Flags(Bool("help", "h").Help("show help."))
 
 	return nil
 }

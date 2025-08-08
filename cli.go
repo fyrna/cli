@@ -35,9 +35,10 @@ type App struct {
 	// Internal configuration populated by ConfigOption(s).
 	config appConfig
 
-	root    *node    // Internal command tree.
-	plugins []Plugin // Registered plugins.
-	globals []Flag   // global flags
+	root           *node                // Internal command tree.
+	plugins        []Plugin             // Registered plugins.
+	globals        []Flag               // global flags
+	helpFlagAction func(*Context) error // help flag handler
 }
 
 // appConfig holds non-exported settings modified through ConfigOption.
@@ -171,7 +172,7 @@ func New(name string, opts ...ConfigOption) *App {
 		o(app)
 	}
 
-	app.Adopt(printAppVersion{})
+	app.Adopt(BuiltinPlugin{})
 
 	return app
 }
@@ -241,6 +242,19 @@ func (a *App) execute(c *Command, args []string) (err error) {
 
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
+	}
+
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+
+	h := fs.Lookup("help")
+	if h != nil && h.Value.String() == "true" {
+		ctx := &Context{App: a, Cmd: c, Flags: fs}
+		if a.helpFlagAction != nil {
+			return a.helpFlagAction(ctx)
+		}
+		return a.PrintRootHelp()
 	}
 
 	// validate required flags & ranges
