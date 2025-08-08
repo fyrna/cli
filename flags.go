@@ -155,17 +155,71 @@ func (f *intFlag) apply(fs *flag.FlagSet) {
 	}
 }
 
-// GlobalFlags returns a CommandOption that adds flags to the root command.
 func (a *App) Flags(ff ...Flag) *App {
 	a.globals = append(a.globals, ff...)
 	return a
 }
 
-// Flags returns a CommandOption that adds flags to the specific command.
 func Flags(ff ...Flag) CommandOption {
 	return func(cmd *Command) {
 		for _, f := range ff {
 			f.apply(flagSet(&cmd.Flags))
 		}
 	}
+}
+
+// FlagInfo exposes the minimal read-only view of a flag.
+type FlagInfo interface {
+	GetName() string         // long name, e.g. "config"
+	GetUsage() string        // help text
+	GetShort() []string      // short name, e.g. "c"
+	GetDefaultValue() string // default value as string
+	HasShort() bool          // true if has short form
+	IsBool() bool            // true if boolean flag
+}
+
+// i have no idea how to do this actually, so, here you go.
+//
+// READ-ONLY HELPER
+func (f *stringFlag) GetName() string {
+	return f.name
+}
+func (f *stringFlag) GetUsage() string {
+	return f.usage
+}
+func (f *stringFlag) GetShort() []string {
+	if len(f.short) > 0 {
+		return f.short
+	}
+	return nil
+}
+func (f *stringFlag) GetDefaultValue() string {
+	return f.def
+}
+func (f *stringFlag) IsBool() bool {
+	return false
+}
+func (f *stringFlag) HasShort() bool {
+	return len(f.short) > 0
+}
+func (f *boolFlag) GetName() string {
+	return f.name
+}
+func (f *boolFlag) GetUsage() string {
+	return f.usage
+}
+func (f *boolFlag) GetShort() []string {
+	if len(f.short) > 0 {
+		return f.short
+	}
+	return nil
+}
+func (f *boolFlag) GetDefaultValue() string {
+	return fmt.Sprintf("%t", f.def)
+}
+func (f *boolFlag) HasShort() bool {
+	return len(f.short) > 0
+}
+func (f *boolFlag) IsBool() bool {
+	return true
 }

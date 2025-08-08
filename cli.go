@@ -356,3 +356,61 @@ func (a *App) Run() {
 		os.Exit(1)
 	}
 }
+
+// --- some litte helpers
+
+// WalkCommands calls fn for every registered command.
+// The Command pointer is read-only; plugin must not mutate it.
+func (a *App) WalkCommands(fn func(path string, cmd *Command)) {
+	var walk func(n *node, prefix string)
+
+	walk = func(n *node, prefix string) {
+		for name, child := range n.child {
+			full := name
+
+			if prefix != "" {
+				full = prefix + " " + name
+			}
+
+			fn(full, child.cmd)
+			walk(child, full)
+		}
+	}
+
+	walk(a.root, "")
+}
+
+// LookupCommand returns the command at the given path, if any.
+// Returned *Command is read-only.
+func (a *App) LookupCommand(path string) (*Command, bool) {
+	parts := strings.Split(path, " ")
+	n, rest := a.root.get(parts)
+
+	if len(rest) == 0 && n.cmd != nil {
+		return n.cmd, true
+	}
+
+	return nil, false
+}
+
+// GlobalFlagsInfo returns a read-only snapshot of global flags.
+func (a *App) GlobalFlagsInfo() []FlagInfo {
+	out := make([]FlagInfo, 0, len(a.globals))
+	for _, fl := range a.globals {
+		out = append(out, fl.(FlagInfo))
+	}
+	return out
+}
+
+// EachFlagInfo iterates over the local flags of the command via a read-only interface.
+func (c *Command) EachFlagInfo(fn func(FlagInfo)) {
+	if c.Flags == nil {
+		return
+	}
+
+	c.Flags.VisitAll(func(f *flag.Flag) {
+		if fi, ok := f.Value.(FlagInfo); ok {
+			fn(fi)
+		}
+	})
+}
