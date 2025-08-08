@@ -321,25 +321,6 @@ func (a *App) safeExecute(c *Command, args []string) (err error) {
 func (a *App) Parse(args []string) error {
 	a.debugf("bug report: https://github.com/fyrna/cli/issues")
 
-	// NOTE: FOR REFERENCE ONLY, I KEEP THIS CODE HERE!
-	//
-	// // build a throw-away flag set containing ONLY global flags
-	// fs := flag.NewFlagSet(a.Name, flag.ContinueOnError)
-	// // add global flags so -h/--help is recognised
-	// for _, gf := range a.globals {
-	// 	gf.apply(fs)
-	// }
-
-	// _ = fs.Parse(args) // ignore, only care about help flag
-
-	// if help := fs.Lookup("help"); help != nil && help.Value.String() == "true" {
-	// 	ctx := &Context{App: a}
-	// 	if a.helpFlagAction != nil {
-	// 		return a.helpFlagAction(ctx)
-	// 	}
-	// 	return a.PrintRootHelp()
-	// }
-
 	if len(args) == 0 {
 		a.debugf("no root command set yet")
 
